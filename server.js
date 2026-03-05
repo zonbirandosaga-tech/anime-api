@@ -41,64 +41,75 @@ app.use((req, res, next) => {
 });
 
 // ── HLS Proxy ──────────────────────────────────────────────────────────────
+const REFERERS = [
+  "https://megacloud.tv/",
+  "https://megacloud.blog/",
+  "https://megacloud.club/",
+  "https://aniwatch.to/",
+  "https://megaplay.buzz/",
+  "https://hianime.to/",
+];
+
 app.get("/api/proxy", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: "No url provided" });
 
   const decoded = decodeURIComponent(url);
 
-  // Pick the right referer based on the CDN host
-  let referer = "https://megacloud.blog/";
-  if (decoded.includes("megaplay") || decoded.includes("s-1") || decoded.includes("s-2")) {
-    referer = "https://megaplay.buzz/";
-  } else if (decoded.includes("crimsonstorm") || decoded.includes("douvid")) {
-    referer = "https://megacloud.blog/";
-  }
+  let response;
+  let usedReferer;
 
-  try {
-    const response = await fetch(decoded, {
-      headers: {
-        "Referer": referer,
-        "Origin": new URL(referer).origin,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "*/*",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "cross-site",
-      },
-    });
-
-    if (!response.ok) {
-      console.error(`Proxy upstream error: ${response.status} for ${decoded}`);
-      return res.status(response.status).json({ error: `Upstream returned ${response.status}` });
-    }
-
-    const contentType = response.headers.get("content-type") || "application/octet-stream";
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cache-Control", "no-cache");
-
-    // Rewrite m3u8 so all segment/playlist URLs also go through this proxy
-    if (decoded.includes(".m3u8")) {
-      const text = await response.text();
-      const baseUrl = decoded.substring(0, decoded.lastIndexOf("/") + 1);
-
-      const rewritten = text.replace(/^(?!#)(\S+)$/gm, (match) => {
-        const absolute = match.startsWith("http") ? match : baseUrl + match;
-        return `/api/proxy?url=${encodeURIComponent(absolute)}`;
+  for (const referer of REFERERS) {
+    try {
+      response = await fetch(decoded, {
+        headers: {
+          "Referer": referer,
+          "Origin": new URL(referer).origin,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Sec-Fetch-Dest": "empty",
+          "Sec-Fetch-Mode": "cors",
+          "Sec-Fetch-Site": "cross-site",
+        },
       });
 
-      return res.send(rewritten);
+      if (response.ok) {
+        usedReferer = referer;
+        break;
+      }
+
+      console.log(`Referer ${referer} → ${response.status} for ${decoded}`);
+    } catch (err) {
+      console.log(`Referer ${referer} threw: ${err.message}`);
     }
-
-    // Binary segments — pipe directly
-    Readable.fromWeb(response.body).pipe(res);
-
-  } catch (err) {
-    console.error("Proxy error:", err);
-    res.status(500).json({ error: "Proxy failed", details: err.message });
   }
+
+  if (!response || !response.ok) {
+    console.error(`All referers failed for ${decoded}`);
+    return res.status(403).json({ error: "All referers failed" });
+  }
+
+  const contentType = response.headers.get("content-type") || "application/octet-stream";
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-cache");
+
+  // Rewrite m3u8 so all segment/playlist URLs also go through this proxy
+  if (decoded.includes(".m3u8")) {
+    const text = await response.text();
+    const baseUrl = decoded.substring(0, decoded.lastIndexOf("/") + 1);
+
+    const rewritten = text.replace(/^(?!#)(\S+)$/gm, (match) => {
+      const absolute = match.startsWith("http") ? match : baseUrl + match;
+      return `/api/proxy?url=${encodeURIComponent(absolute)}`;
+    });
+
+    return res.send(rewritten);
+  }
+
+  // Binary segments — pipe directly
+  Readable.fromWeb(response.body).pipe(res);
 });
 // ───────────────────────────────────────────────────────────────────────────
 
