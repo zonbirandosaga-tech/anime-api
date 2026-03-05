@@ -48,6 +48,7 @@ const REFERERS = [
   "https://aniwatch.to/",
   "https://megaplay.buzz/",
   "https://hianime.to/",
+  "https://rainveil36.xyz/",
 ];
 
 app.get("/api/proxy", async (req, res) => {
