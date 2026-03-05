@@ -51,6 +51,7 @@ const REFERERS = [
   "https://rainveil36.xyz/",
   "https://rapid-cloud.co/",
   "https://crimsonstorm18.live/",
+  "https://stormshade84.live/",
 
 ];
 
