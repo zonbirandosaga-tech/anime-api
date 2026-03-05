@@ -49,6 +49,9 @@ const REFERERS = [
   "https://megaplay.buzz/",
   "https://hianime.to/",
   "https://rainveil36.xyz/",
+  "https://rapid-cloud.co/",
+  "https://crimsonstorm18.live/",
+
 ];
 
 app.get("/api/proxy", async (req, res) => {
