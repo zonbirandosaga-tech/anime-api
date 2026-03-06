@@ -52,6 +52,7 @@ const REFERERS = [
   "https://rapid-cloud.co/",
   "https://crimsonstorm18.live/",
   "https://stormshade84.live/",
+
 ];
 
 app.get("/api/proxy", async (req, res) => {
@@ -75,7 +76,6 @@ app.get("/api/proxy", async (req, res) => {
           "Sec-Fetch-Dest": "empty",
           "Sec-Fetch-Mode": "cors",
           "Sec-Fetch-Site": "cross-site",
-          "X-Forwarded-For": "1.1.1.1",
         },
       });
 
