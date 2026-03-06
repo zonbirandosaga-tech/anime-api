@@ -34,7 +34,7 @@ app.use((req, res, next) => {
   ) {
     res.setHeader("Access-Control-Allow-Origin", origin || "*");
     res.setHeader("Access-Control-Allow-Methods", "GET");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "*");
     return next();
   }
   res.status(403).json({ success: false, message: "Forbidden: Origin not allowed" });
@@ -52,7 +52,6 @@ const REFERERS = [
   "https://rapid-cloud.co/",
   "https://crimsonstorm18.live/",
   "https://stormshade84.live/",
-
 ];
 
 app.get("/api/proxy", async (req, res) => {
@@ -76,6 +75,7 @@ app.get("/api/proxy", async (req, res) => {
           "Sec-Fetch-Dest": "empty",
           "Sec-Fetch-Mode": "cors",
           "Sec-Fetch-Site": "cross-site",
+          "X-Forwarded-For": req.headers["x-forwarded-for"] || req.ip,
         },
       });
 
@@ -98,6 +98,8 @@ app.get("/api/proxy", async (req, res) => {
   const contentType = response.headers.get("content-type") || "application/octet-stream";
   res.setHeader("Content-Type", contentType);
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET");
+  res.setHeader("Access-Control-Allow-Headers", "*");
   res.setHeader("Cache-Control", "no-cache");
 
   // Rewrite m3u8 so all segment/playlist URLs also go through this proxy
@@ -105,15 +107,22 @@ app.get("/api/proxy", async (req, res) => {
     const text = await response.text();
     const baseUrl = decoded.substring(0, decoded.lastIndexOf("/") + 1);
 
-    const rewritten = text.replace(/^(?!#)(\S+)$/gm, (match) => {
-      const absolute = match.startsWith("http") ? match : baseUrl + match;
-      return `/api/proxy?url=${encodeURIComponent(absolute)}`;
-    });
+    const rewritten = text
+      // rewrite absolute URLs for any media/key/subtitle files
+      .replace(/https?:\/\/[^\s"]+\.(m3u8|ts|aac|mp4|vtt|key|php)[^\s"]*/g, (match) => {
+        return `/api/proxy?url=${encodeURIComponent(match)}`;
+      })
+      // rewrite relative URLs on their own line
+      .replace(/^(?!#)([^#\s][^\s]*)$/gm, (match) => {
+        if (match.startsWith("/api/proxy")) return match;
+        if (match.startsWith("http")) return match;
+        return `/api/proxy?url=${encodeURIComponent(baseUrl + match)}`;
+      });
 
     return res.send(rewritten);
   }
 
-  // Binary segments — pipe directly
+  // Binary segments — pipe with CORS headers
   Readable.fromWeb(response.body).pipe(res);
 });
 // ───────────────────────────────────────────────────────────────────────────
